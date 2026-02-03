@@ -104,6 +104,37 @@ export default {
   },
   defaultSearchSource: ['youtube', 'soundcloud'],
   unifiedSearchSources: ['youtube', 'soundcloud'],
+  mirroring: {
+    // Mirroring configuration - defines which sources to use for finding playable versions of tracks for sources which doesn't support streaming
+    // Providers are tried in order until a match with score ≥  highConfidenceThreshold is found, or all are exhausted
+    sources: [
+      {
+        name: 'youtube', // Source name (must match an enabled source in the sources config)
+        prefix: 'ytmsearch', // Search prefix to use (ytmsearch = YouTube Music, ytsearch = YouTube, scsearch = SoundCloud, etc.)
+        isrc: true // If true and track has ISRC, searches using ISRC code for more accurate matching. If false or no ISRC, uses title+artist
+      },
+      {
+        name: 'youtube', // Same source can be used multiple times with different configs
+        prefix: 'ytsearch', // Regular YouTube search (fallback if YouTube Music fails)
+        isrc: false // Disable ISRC for this attempt (will use title+artist search)
+      },
+      {
+        name: 'soundcloud', // Third fallback - SoundCloud
+        prefix: 'scsearch',
+        isrc: false
+      }
+    ],
+    minSimilarityThreshold: 0.55, // Minimum match score to accept (0.0-1.0). Lower = more permissive but less accurate (default: 0.55)
+    highConfidenceThreshold: 0.80, // Score threshold to use match immediately without trying other providers (default: 0.85)
+    immediateUseThreshold: 0.85, // Score threshold to use match and skip all remaining providers (default: 0.90)
+    weights: {
+      // How much each component contributes to final score (must sum to 1.0)
+      title: 0.45, // Title similarity weight (default: 0.45 = 45%)
+      artist: 0.35, // Artist similarity weight (default: 0.35 = 35%)
+      duration: 0.20 // Duration similarity weight (default: 0.20 = 20%)
+    },
+    durationToleranceMs: 5000 // Duration difference tolerance in milliseconds (default: 5000 = ±5 seconds)
+  },
   sources: {
     vkmusic: {
       enabled: true,
@@ -163,7 +194,7 @@ export default {
       enabled: true
     },
     soundcloud: {
-      enabled: true,
+      enabled: true
       // clientId: ""
     },
     local: {
@@ -207,7 +238,7 @@ export default {
     },
     vimeo: {
       // Note: not 100% of the songs are currently working (but most should.), because i need to code a different extractor for every year (2010, 2011, etc. not all are done)
-      enabled: true,
+      enabled: true
     },
     telegram: {
       enabled: true
@@ -248,7 +279,7 @@ export default {
       albumLoadLimit: 100,
       artistLoadLimit: 100
     },
-    "google-tts": {
+    'google-tts': {
       enabled: true,
       language: 'en-US'
     },
@@ -258,7 +289,7 @@ export default {
     // https://github.com/OHF-Voice/piper1-gpl/tree/main?tab=readme-ov-file
     pipertts: {
       enabled: false, // Disabled by default. Enable it to use Piper TTS.
-      url: 'http://localhost:5000', // URL of your Piper TTS server
+      url: 'http://localhost:5000' // URL of your Piper TTS server
       // Optional settings (defaults from Piper):
       // voice: 'en_US-lessac-medium',
       // speaker: 0,
@@ -279,7 +310,7 @@ export default {
         resolve: ['AndroidVR', 'TV', 'WebEmbedded', 'WebParentTools', 'IOS', 'Web'], // Clients used for resolving detailed track information (channel, external links, etc.)
         settings: {
           TV: {
-            refreshToken: [""] // You can use a string "token" or an array ["token1", "token2"] for rotation/fallback
+            refreshToken: [''] // You can use a string "token" or an array ["token1", "token2"] for rotation/fallback
           }
         }
       },
@@ -507,10 +538,10 @@ export default {
     autoCleanup: true
   },
   plugins: [
-    /*  {
+    /* {
           name: 'nodelink-sample-plugin',
           source: 'local'
         } */
   ],
   pluginConfig: {}
-}
+};

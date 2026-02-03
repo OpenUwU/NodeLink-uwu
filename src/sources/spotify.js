@@ -1,11 +1,11 @@
 import {
   encodeTrack,
-  getBestMatch,
   http1makeRequest,
   logger
 } from '../utils.js'
 import { fetchCanvas } from '../modules/spotifyCanvas.js'
 import { getLocalToken } from '../modules/spotifyAuth.js'
+import { resolveMirrorTrack } from '../managers/mirroringResolver.js'
 
 const SPOTIFY_API_BASE_URL = 'https://api.spotify.com/v1'
 const SPOTIFY_CLIENT_API_URL = 'https://spclient.wg.spotify.com'
@@ -230,7 +230,7 @@ export default class SpotifySource {
 
   _isTokenValid() {
     return (
-      this.tokenExpiry && Date.now() < this.tokenExpiry - TOKEN_REFRESH_MARGIN
+      this.tokenExpiry && Date.now() < this.tokenExpiry - TOKEN_REFRESH_mMARGIN
     )
   }
 
@@ -1534,94 +1534,49 @@ export default class SpotifySource {
   }
 
   async getTrackUrl(decodedTrack) {
-    let isExplicit = false
-    if (decodedTrack.uri) {
-      try {
-        const url = new URL(decodedTrack.uri)
-        isExplicit = url.searchParams.get('explicit') === 'true'
-      } catch (_e) {
-        // Ignore malformed URI
-      }
-    }
 
-    const searchQuery = this._buildSearchQuery(decodedTrack, isExplicit)
+
+    logger(
+      'debug',
+      'Spotify',
+      `Starting mirror resolution for "${decodedTrack.title}" by "${decodedTrack.author}" `
+    )
 
     try {
-      let searchResult
-      if (decodedTrack.isrc) {
-        searchResult = await this.nodelink.sources.search(
-          'youtube',
-          `"${decodedTrack.isrc}"`,
-          'ytmsearch'
-        )
-        if (
-          searchResult.loadType !== 'search' ||
-          searchResult.data.length === 0
-        ) {
-          searchResult = await this.nodelink.sources.search(
-            'youtube',
-            searchQuery,
-            'ytmsearch'
-          )
-        }
-      } else {
-        searchResult = await this.nodelink.sources.search(
-          'youtube',
-          searchQuery,
-          'ytmsearch'
-        )
-      }
 
-      if (
-        searchResult.loadType !== 'search' ||
-        searchResult.data.length === 0
-      ) {
-        searchResult =
-          await this.nodelink.sources.searchWithDefault(searchQuery)
-      }
+      const mirrorResult = await resolveMirrorTrack(this.nodelink, decodedTrack)
 
-      if (
-        searchResult.loadType !== 'search' ||
-        searchResult.data.length === 0
-      ) {
+      if (!mirrorResult || !mirrorResult.match) {
+        logger(
+          'warn',
+          'Spotify',
+          `No mirror found for "${decodedTrack.title}" `
+        )
         return {
           exception: {
-            message: 'No alternative stream found via default search.',
+            message: 'No suitable mirror source found for track',
             severity: 'fault'
           }
         }
       }
 
-      const bestMatch = getBestMatch(searchResult.data, decodedTrack, {
-        allowExplicit: this.allowExplicit
-      })
+      const { match, score, provider } = mirrorResult
 
-      if (!bestMatch) {
-        return {
-          exception: {
-            message: 'No suitable alternative stream found after filtering.',
-            severity: 'fault'
-          }
-        }
-      }
+      logger(
+        'info',
+        'Spotify',
+        `Using mirror from [${provider}] for "${decodedTrack.title}" (score: ${score.toFixed(2)})`
+      )
 
-      const streamInfo = await this.nodelink.sources.getTrackUrl(bestMatch.info)
-      return { newTrack: bestMatch, ...streamInfo }
+      const streamInfo = await this.nodelink.sources.getTrackUrl(match.info || match)
+      return { newTrack: match, ...streamInfo }
     } catch (e) {
       logger(
-        'warn',
+        'error',
         'Spotify',
-        `Search for "${searchQuery}" failed: ${e.message}`
+        `Mirror resolution failed for "${decodedTrack.title}": ${e.message}`
       )
       return { exception: { message: e.message, severity: 'fault' } }
     }
-  }
-
-  _buildSearchQuery(track, isExplicit) {
-    let searchQuery = `${track.title} ${track.author}`
-    if (isExplicit) {
-      searchQuery += this.allowExplicit ? ' lyrical video' : ' clean version'
-    }
-    return searchQuery
   }
 }
