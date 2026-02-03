@@ -230,7 +230,7 @@ export default class SpotifySource {
 
   _isTokenValid() {
     return (
-      this.tokenExpiry && Date.now() < this.tokenExpiry - TOKEN_REFRESH_mMARGIN
+      this.tokenExpiry && Date.now() < this.tokenExpiry - TOKEN_REFRESH_MARGIN
     )
   }
 
