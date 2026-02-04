@@ -108,6 +108,38 @@ export default {
     // Mirroring configuration - defines which sources to use for finding playable versions of tracks for sources which doesn't support streaming
     // Providers are tried in order until a match with score ≥  highConfidenceThreshold is found, or all are exhausted
     sources: [
+    //  {
+      //  name: 'gaana,',
+       // prefix: 'gaanasearch',
+      //  isrc: false,
+     // },
+      {
+        name: 'jioSaavn',
+        prefix: 'jsssearch',
+        isrc: false
+      },
+      
+      {
+        name: "audiomack",
+        prefix: "admsearch", 
+        isrc: false
+      }, 
+      {
+        name: "deezer",
+        prefix: "dzsearch",
+        isrc: false
+        
+      },
+      {
+        name: "deezer",
+        prefix: "dzsearch",
+        isrc: true
+      },
+      {
+        name: 'soundcloud', 
+        prefix: 'scsearch',
+        isrc: false
+      },
       {
         name: 'youtube', // Source name (must match an enabled source in the sources config)
         prefix: 'ytmsearch', // Search prefix to use (ytmsearch = YouTube Music, ytsearch = YouTube, scsearch = SoundCloud, etc.)
@@ -118,11 +150,7 @@ export default {
         prefix: 'ytsearch', // Regular YouTube search (fallback if YouTube Music fails)
         isrc: false // Disable ISRC for this attempt (will use title+artist search)
       },
-      {
-        name: 'soundcloud', // Third fallback - SoundCloud
-        prefix: 'scsearch',
-        isrc: false
-      }
+      
     ],
     minSimilarityThreshold: 0.55, // Minimum match score to accept (0.0-1.0). Lower = more permissive but less accurate (default: 0.55)
     highConfidenceThreshold: 0.80, // Score threshold to use match immediately without trying other providers (default: 0.85)
@@ -172,8 +200,8 @@ export default {
       enabled: true
     },
     deezer: {
-      // arl: '',
-      // decryptionKey: '',
+       arl: 'cf648c3743b1309c5d3e179bb127f31dce47c96421679d8f85560ad87d63f98d7598ebe4ec8f0e0ffa9c797739d0f2ec61c41c2d903ae36ac0f77878829661373ecc2dc716b979d04d93a458209ac28e431b47b9c8d01cbdc6e27c0bb4621af5',
+     decryptionKey: 'g4el58wc0zvf9na1',
       enabled: true
     },
     bandcamp: {
@@ -272,7 +300,7 @@ export default {
     spotify: {
       enabled: true,
       clientId: '',
-      clientSecret: '',
+      clientSecret: 'db5ee',
       externalAuthUrl: 'http://get.1lucas1apk.fun/spotify/gettoken', // URL to external token provider (e.g. http://localhost:8080/api/token - use https://github.com/topi314/spotify-tokener or https://github.com/1Lucas1apk/gettoken)
       market: 'US',
       playlistLoadLimit: 1, // 0 means no limit (loads all tracks), 1 = 100 tracks, 2 = 100 and so on!
