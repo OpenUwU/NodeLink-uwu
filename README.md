@@ -35,3 +35,9 @@ Credits:
    - vimeo
    - letrasmus
    - vkmusic
+   - mixcloud
+   - audius
+   - nicovideo
+   - pipertts
+   - googletts
+   - flowery 

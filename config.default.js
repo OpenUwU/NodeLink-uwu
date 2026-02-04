@@ -50,7 +50,7 @@ export default {
       ttlDays: 7
     },
     debug: {
-      all: false,
+      all: true,
       request: true,
       session: true,
       player: true,
@@ -136,22 +136,8 @@ export default {
     durationToleranceMs: 5000 // Duration difference tolerance in milliseconds (default: 5000 = ±5 seconds)
   },
   sources: {
-    vkmusic: {
-      enabled: true,
-      userToken: '', // (optional) get from vk in browser devtools -> reqs POST /?act=web_token HTTP/2 - headers -> response -> access_token
-      userCookie: '' // (required without userToken) get from vk in browser devtools -> reqs POST /?act=web_token HTTP/2 - headers -> request -> cookie (copy full cookie header)
-    },
+    
     amazonmusic: {
-      enabled: true
-    },
-    bluesky: {
-      enabled: true
-    },
-    anghami: {
-      enabled: false,
-      cookies: '' // Optional: Useful for accessing restricted or private content
-    },
-    rss: {
       enabled: true
     },
     songlink: {
@@ -236,13 +222,6 @@ export default {
       maxReconnects: 0,
       reconnectDelayMs: 1000
     },
-    vimeo: {
-      // Note: not 100% of the songs are currently working (but most should.), because i need to code a different extractor for every year (2010, 2011, etc. not all are done)
-      enabled: true
-    },
-    telegram: {
-      enabled: true
-    },
     shazam: {
       enabled: true,
       allowExplicit: true
@@ -253,17 +232,6 @@ export default {
     },
     genius: {
       enabled: true
-    },
-    pinterest: {
-      enabled: true
-    },
-    flowery: {
-      enabled: true,
-      voice: 'Salli',
-      translate: false,
-      silence: 0,
-      speed: 1.0,
-      enforceConfig: false
     },
     jiosaavn: {
       enabled: true,
@@ -278,24 +246,6 @@ export default {
       playlistLoadLimit: 100,
       albumLoadLimit: 100,
       artistLoadLimit: 100
-    },
-    'google-tts': {
-      enabled: true,
-      language: 'en-US'
-    },
-    // Piper TTS Configuration
-    // This source uses an external Piper TTS HTTP server.
-    // You can find the Piper HTTP server repository here:
-    // https://github.com/OHF-Voice/piper1-gpl/tree/main?tab=readme-ov-file
-    pipertts: {
-      enabled: false, // Disabled by default. Enable it to use Piper TTS.
-      url: 'http://localhost:5000' // URL of your Piper TTS server
-      // Optional settings (defaults from Piper):
-      // voice: 'en_US-lessac-medium',
-      // speaker: 0,
-      // length_scale: 1.0,
-      // noise_scale: 0.667,
-      // noise_w_scale: 0.8
     },
     youtube: {
       enabled: true,
@@ -318,15 +268,6 @@ export default {
         url: 'https://cipher.kikkia.dev/api',
         token: null
       }
-    },
-    instagram: {
-      enabled: true
-    },
-    kwai: {
-      enabled: true
-    },
-    twitch: {
-      enabled: true
     },
     spotify: {
       enabled: true,
@@ -351,14 +292,6 @@ export default {
       albumPageLoadConcurrency: 5,
       allowExplicit: true
     },
-    audius: {
-      enabled: true,
-      appName: '',
-      apiKey: '', // go to https://audius.co/settings and create an app and paste the app name and api stuff into here.
-      apiSecret: '',
-      playlistLoadLimit: 100,
-      albumLoadLimit: 100
-    },
     tidal: {
       enabled: true,
       token: 'token_here', //manually | or "token_here" to get a token automatically, get from tidal web player devtools; using login google account
@@ -373,18 +306,6 @@ export default {
       // csrfToken: '',
       remoteTokenUrl: 'https://get.1lucas1apk.fun/pandora/gettoken' // URL to a remote provider that returns { success: true, authToken: "...", csrfToken: "...", expires_in_seconds: ... } //https://github.com/1Lucas1apk/gettoken
     },
-    nicovideo: {
-      enabled: true
-    },
-    reddit: {
-      enabled: true
-    },
-    tumblr: {
-      enabled: true
-    },
-    twitter: {
-      enabled: true
-    },
     qobuz: {
       enabled: true,
       userToken: '', // (optional) get from play.qobuz.com in browser devtools -> Application -> Local Storage -> localuser -> token
@@ -394,18 +315,6 @@ export default {
     lastfm: {
       enabled: true
     },
-    letrasmus: {
-      enabled: true
-    },
-    yandexmusic: {
-      enabled: true,
-      accessToken: '',
-      allowUnavailable: false,
-      allowExplicit: true,
-      artistLoadLimit: 1, // 0 = no limit, 1 = 10 tracks, 2 = 20 tracks, etc.
-      albumLoadLimit: 1, // 0 = no limit, 1 = 50 tracks, 2 = 100 tracks, etc.
-      playlistLoadLimit: 1 // 0 = no limit, 1 = 100 tracks, 2 = 200 tracks, etc.
-    }
   },
   lyrics: {
     fallbackSource: 'genius',
@@ -422,20 +331,12 @@ export default {
     lrclib: {
       enabled: true
     },
-    letrasmus: {
-      enabled: true
-    },
     bilibili: {
       enabled: true
     },
-    yandexmusic: {
-      enabled: true
-    }
   },
   meanings: {
-    letrasmus: {
-      enabled: true
-    },
+    
     wikipedia: {
       enabled: true
     }
