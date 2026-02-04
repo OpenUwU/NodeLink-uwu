@@ -11,3 +11,11 @@ Credits:
 
 - Implement mirroring in all mirrored sources
   - Spotify ✓
+  - Amazon Music
+  - Apple Music
+  - Last.fm
+  - Pandora
+  - Qobuz
+  - Shazam
+  - Tidal
+  - Yandex Music
