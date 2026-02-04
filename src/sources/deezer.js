@@ -485,7 +485,7 @@ export default class DeezerSource {
     try {
       const mirrorResult = await resolveMirrorTrack(this.nodelink, decodedTrack)
 
-      if (!mirrorResult || !mirrorResult.match) {
+      if (!mirrorResult || !mirrorResult.match || !mirrorResult.streamInfo) {
         logger(
           'warn',
           'Deezer',
@@ -499,7 +499,7 @@ export default class DeezerSource {
         }
       }
 
-      const { match, score, provider } = mirrorResult
+      const { match, score, provider , streamInfo} = mirrorResult
 
       logger(
         'info',
@@ -507,7 +507,7 @@ export default class DeezerSource {
         `Using mirror from [${provider}] for "${decodedTrack.title}" (score: ${score.toFixed(2)})`
       )
 
-      const streamInfo = await this.nodelink.sources.getTrackUrl(match.info || match, itag, forceRefresh)
+      
       return { newTrack: match, ...streamInfo }
     } catch (error) {
       logger(

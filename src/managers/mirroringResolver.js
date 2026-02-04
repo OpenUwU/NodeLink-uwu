@@ -1,39 +1,48 @@
 import { logger } from '../utils.js'
 
-function normalize(str) {
+const normalize = (str) => {
   if (!str) return ''
   return str
     .toLowerCase()
-    .replace(/\s*\([^)]*\)/g, '')
-    .replace(/\s*\[[^\]]*\]/g, '')
-    .replace(/feat\.?|ft\.?/gi, '')
+    .replace(/\s*\([^)]*\)|\s*\[[^\]]*\]|feat\.?|ft\.?/gi, '')
     .replace(/[^a-z0-9\s]/g, '')
     .replace(/\s+/g, ' ')
     .trim()
 }
 
-function levenshteinDistance(s1, s2) {
+const levenshteinDistance = (s1, s2) => {
   const len1 = s1.length
   const len2 = s2.length
-  const dp = Array(len1 + 1).fill(null).map(() => Array(len2 + 1).fill(0))
 
-  for (let i = 0; i <= len1; i++) dp[i][0] = i
-  for (let j = 0; j <= len2; j++) dp[0][j] = j
+  if (len1 === 0) return len2
+  if (len2 === 0) return len1
+
+  let prevRow = new Array(len2 + 1)
+  let currRow = new Array(len2 + 1)
+
+  for (let j = 0; j <= len2; j++) prevRow[j] = j
 
   for (let i = 1; i <= len1; i++) {
+    currRow[0] = i
+
     for (let j = 1; j <= len2; j++) {
       const cost = s1[i - 1] === s2[j - 1] ? 0 : 1
-      dp[i][j] = Math.min(
-        dp[i - 1][j] + 1,
-        dp[i][j - 1] + 1,
-        dp[i - 1][j - 1] + cost
+      currRow[j] = Math.min(
+        prevRow[j] + 1,
+        currRow[j - 1] + 1,
+        prevRow[j - 1] + cost
       )
     }
+
+    const temp = prevRow
+    prevRow = currRow
+    currRow = temp
   }
-  return dp[len1][len2]
+
+  return prevRow[len2]
 }
 
-function calculateStringSimilarity(s1, s2) {
+const calculateStringSimilarity = (s1, s2) => {
   if (s1 === s2) return 1.0
   if (!s1 || !s2) return 0.0
   if (s1.includes(s2) || s2.includes(s1)) return 0.85
@@ -45,7 +54,7 @@ function calculateStringSimilarity(s1, s2) {
   return 1.0 - (distance / maxLen)
 }
 
-function calculateDurationSimilarity(duration1, duration2, tolerance) {
+const calculateDurationSimilarity = (duration1, duration2, tolerance) => {
   if (duration1 <= 0 || duration2 <= 0) return 0.5
 
   const diff = Math.abs(duration1 - duration2)
@@ -57,16 +66,13 @@ function calculateDurationSimilarity(duration1, duration2, tolerance) {
   return Math.max(0.0, ratio)
 }
 
-function calculateMatchScore(original, candidate, config) {
-  const originalTitle = original.title || ''
+const calculateMatchScore = (original, candidate, config, precomputed) => {
   const candidateTitle = candidate.info?.title || candidate.title || ''
-  const originalArtist = original.author || ''
   const candidateArtist = candidate.info?.author || candidate.author || ''
 
-  const originalTitleLower = originalTitle.trim().toLowerCase()
   const candidateTitleLower = candidateTitle.trim().toLowerCase()
 
-  const artistScore = calculateStringSimilarity(normalize(originalArtist), normalize(candidateArtist))
+  const artistScore = calculateStringSimilarity(precomputed.artistNorm, normalize(candidateArtist))
   const durationScore = calculateDurationSimilarity(
     original.length || 0,
     candidate.info?.length || candidate.length || 0,
@@ -74,15 +80,15 @@ function calculateMatchScore(original, candidate, config) {
   )
 
   let titleScore = 0
-  if (originalTitleLower === candidateTitleLower) titleScore = 1.0
-  else if (candidateTitleLower.startsWith(originalTitleLower)) titleScore = 0.95
-  else if (candidateTitleLower.includes(originalTitleLower)) titleScore = 0.90
-  else titleScore = calculateStringSimilarity(normalize(originalTitle), normalize(candidateTitle))
+  if (precomputed.titleLower === candidateTitleLower) titleScore = 1.0
+  else if (candidateTitleLower.startsWith(precomputed.titleLower)) titleScore = 0.95
+  else if (candidateTitleLower.includes(precomputed.titleLower)) titleScore = 0.90
+  else titleScore = calculateStringSimilarity(precomputed.titleNorm, normalize(candidateTitle))
 
   return (titleScore * config.weights.title) + (artistScore * config.weights.artist) + (durationScore * config.weights.duration)
 }
 
-function getScoredMatches(original, candidates, config) {
+const getScoredMatches = (original, candidates, config, precomputed) => {
   if (!candidates || candidates.length === 0) return []
 
   const limit = Math.min(candidates.length, 10)
@@ -90,7 +96,7 @@ function getScoredMatches(original, candidates, config) {
 
   for (let i = 0; i < limit; i++) {
     const candidate = candidates[i]
-    const score = calculateMatchScore(original, candidate, config)
+    const score = calculateMatchScore(original, candidate, config, precomputed)
     scored.push({ match: candidate, score })
 
     logger('debug', 'Mirroring', `Candidate ${i + 1}: "${candidate.info?.title || candidate.title}" | Score: ${score.toFixed(2)}`)
@@ -99,7 +105,7 @@ function getScoredMatches(original, candidates, config) {
   return scored.sort((a, b) => b.score - a.score)
 }
 
-async function getValidatedStreamUrl(nodelink, match) {
+const getValidatedStreamUrl = async (nodelink, match) => {
   const trackTitle = match?.info?.title || match?.title || 'unknown'
 
   try {
@@ -120,7 +126,7 @@ async function getValidatedStreamUrl(nodelink, match) {
   }
 }
 
-async function findValidMatch(nodelink, scoredMatches, minThreshold) {
+const findValidMatch = async (nodelink, scoredMatches, minThreshold) => {
   for (const { match, score } of scoredMatches) {
     if (score < minThreshold) {
       logger('debug', 'Mirroring', `Score ${score.toFixed(2)} below threshold ${minThreshold.toFixed(2)}, stopping validation`)
@@ -129,7 +135,6 @@ async function findValidMatch(nodelink, scoredMatches, minThreshold) {
 
     const validation = await getValidatedStreamUrl(nodelink, match)
     if (validation.valid) {
-      logger('info', 'Mirroring', `Found valid match: "${match?.info?.title || match?.title}" (score: ${score.toFixed(2)})`)
       return { match, score, streamInfo: validation.streamInfo }
     }
   }
@@ -156,6 +161,12 @@ async function resolveMirrorTrack(nodelink, track) {
     { name: 'youtube', prefix: 'ytmsearch', isrc: true },
     { name: 'youtube', prefix: 'ytsearch', isrc: false }
   ]
+
+  const precomputed = {
+    titleNorm: normalize(track.title || ''),
+    titleLower: (track.title || '').trim().toLowerCase(),
+    artistNorm: normalize(track.author || '')
+  }
 
   let globalBestMatch = null
   let globalBestScore = 0.0
@@ -186,7 +197,7 @@ async function resolveMirrorTrack(nodelink, track) {
       continue
     }
 
-    const scoredMatches = getScoredMatches(track, searchResult.data, config)
+    const scoredMatches = getScoredMatches(track, searchResult.data, config, precomputed)
 
     if (scoredMatches.length === 0) continue
 
@@ -225,7 +236,6 @@ async function resolveMirrorTrack(nodelink, track) {
   }
 
   if (globalBestMatch && globalBestScore >= config.minSimilarityThreshold && globalBestStreamInfo) {
-    logger('info', 'Mirroring', `Best match from [${globalBestProvider}]: "${globalBestMatch?.info?.title || 'unknown'}" (score: ${globalBestScore.toFixed(2)})`)
     return { 
       match: globalBestMatch, 
       score: globalBestScore, 

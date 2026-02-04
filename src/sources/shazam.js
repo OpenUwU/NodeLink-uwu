@@ -330,10 +330,10 @@ export default class ShazamSource {
               }
             }
         }
-        const { match, score, provider } = mirrorResult
+        const { match, score, provider, streamInfo } = mirrorResult
         logger(
           'info', "Shazam",`Using mirror from [${provider}] for "${decodedTrack.title}" (score: ${score.toFixed(2)})`)
-        const streamInfo = await this.nodelink.sources.getTrackUrl(match.info || match)
+      //  const streamInfo = await this.nodelink.sources.getTrackUrl(match.info || match)
         return { newTrack: match, ...streamInfo }
       } catch(e) {
         logger(

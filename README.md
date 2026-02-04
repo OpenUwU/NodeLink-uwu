@@ -40,4 +40,5 @@ Credits:
    - nicovideo
    - pipertts
    - googletts
-   - flowery 
+   - flowery
+   - songlink

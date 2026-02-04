@@ -307,7 +307,7 @@ export default class TidalSource {
       'debug', "Tidal",`Starting mirror resolution for "${decodedTrack.title}" by "${decodedTrack.author}"`)
       try{
         const mirrorResult = await resolveMirrorTrack(this.nodelink, decodedTrack)
-        if(!mirrorResult || !mirrorResult.match){
+        if(!mirrorResult || !mirrorResult.match || !mirrorResult.streamInfo){
           logger(
             'warn', "Tidal",`No mirror found for "${decodedTrack.title}"`)
             return {
@@ -317,10 +317,10 @@ export default class TidalSource {
               }
             }
         }
-        const { match, score, provider } = mirrorResult
+        const { match, score, provider , streamInfo} = mirrorResult
         logger(
           'info', "Tidal",`Using mirror from [${provider}] for "${decodedTrack.title}" (score: ${score.toFixed(2)})`)
-        const streamInfo = await this.nodelink.sources.getTrackUrl(match.info || match)
+        
         return { newTrack: match, ...streamInfo }
       } catch(e) {
         logger(

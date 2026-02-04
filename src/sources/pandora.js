@@ -720,7 +720,7 @@ export default class PandoraSource {
       'debug', "Pandora",`Starting mirror resolution for "${decodedTrack.title}" by "${decodedTrack.author}"`)
       try{
         const mirrorResult = await resolveMirrorTrack(this.nodelink, decodedTrack)
-        if(!mirrorResult || !mirrorResult.match){
+        if(!mirrorResult || !mirrorResult.match || !mirrorResult.streamInfo){
           logger(
             'warn', "Pandora",`No mirror found for "${decodedTrack.title}"`)
             return {
@@ -730,10 +730,10 @@ export default class PandoraSource {
               }
             }
         }
-        const { match, score, provider } = mirrorResult
+        const { match, score, provider, streamInfo} = mirrorResult
         logger(
           'info', "Pandora",`Using mirror from [${provider}] for "${decodedTrack.title}" (score: ${score.toFixed(2)})`)
-        const streamInfo = await this.nodelink.sources.getTrackUrl(match.info || match)
+        
         
         return { newTrack: match, ...streamInfo }
         

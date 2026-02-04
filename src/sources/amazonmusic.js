@@ -710,7 +710,7 @@ export default class AmazonMusicSource {
         }
       }
 
-      const { match, score, provider } = mirrorResult
+      const { match, score, provider , streamInfo} = mirrorResult
 
       logger(
         'info',
@@ -718,7 +718,7 @@ export default class AmazonMusicSource {
         `Using mirror from [${provider}] for "${decodedTrack.title}" (score: ${score.toFixed(2)})`
       )
 
-      const streamInfo = await this.nodelink.sources.getTrackUrl(match.info || match, itag, forceRefresh)
+      //const streamInfo = await this.nodelink.sources.getTrackUrl(match.info || match, itag, forceRefresh)
       return { newTrack: match, ...streamInfo }
     } catch (e) {
       logger(

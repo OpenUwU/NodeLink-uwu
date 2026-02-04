@@ -519,7 +519,7 @@ export default class AppleMusicSource {
         }
       }
 
-      const { match, score, provider } = mirrorResult
+      const { match, score, provider, streamInfo } = mirrorResult
 
       logger(
         'info',
@@ -527,7 +527,7 @@ export default class AppleMusicSource {
         `Using mirror from [${provider}] for "${decodedTrack.title}" (score: ${score.toFixed(2)})`
       )
 
-      const stream = await this.nodelink.sources.getTrackUrl(match.info || match, itag, forceRefresh)
+     // const stream = await this.nodelink.sources.getTrackUrl(match.info || match, itag, forceRefresh)
       return { newTrack: match, ...stream }
     } catch (error) {
       logger(
