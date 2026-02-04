@@ -1532,25 +1532,22 @@ export default class SpotifySource {
       }
     }
   }
-
   async getTrackUrl(decodedTrack) {
-
 
     logger(
       'debug',
       'Spotify',
-      `Starting mirror resolution for "${decodedTrack.title}" by "${decodedTrack.author}" `
+      `Starting mirror resolution for "${decodedTrack.title}" by "${decodedTrack.author}"`
     )
 
     try {
-
       const mirrorResult = await resolveMirrorTrack(this.nodelink, decodedTrack)
 
-      if (!mirrorResult || !mirrorResult.match) {
+      if (!mirrorResult || !mirrorResult.match || !mirrorResult.streamInfo) {
         logger(
           'warn',
           'Spotify',
-          `No mirror found for "${decodedTrack.title}" `
+          `No valid mirror found for "${decodedTrack.title}"`
         )
         return {
           exception: {
@@ -1560,15 +1557,14 @@ export default class SpotifySource {
         }
       }
 
-      const { match, score, provider } = mirrorResult
+      const { match, score, provider, streamInfo } = mirrorResult
 
       logger(
         'info',
         'Spotify',
-        `Using mirror from [${provider}] for "${decodedTrack.title}" (score: ${score.toFixed(2)})`
+        `Using mirror from [${provider}] for "${decodedTrack.title}" (score: ${score.toFixed(2)}) `
       )
 
-      const streamInfo = await this.nodelink.sources.getTrackUrl(match.info || match)
       return { newTrack: match, ...streamInfo }
     } catch (e) {
       logger(

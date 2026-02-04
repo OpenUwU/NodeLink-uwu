@@ -82,36 +82,59 @@ function calculateMatchScore(original, candidate, config) {
   return (titleScore * config.weights.title) + (artistScore * config.weights.artist) + (durationScore * config.weights.duration)
 }
 
-function findBestMatch(original, candidates, config, minThreshold) {
-  if (!candidates || candidates.length === 0) return null
-
-  let bestMatch = null
-  let bestScore = 0.0
+function getScoredMatches(original, candidates, config) {
+  if (!candidates || candidates.length === 0) return []
 
   const limit = Math.min(candidates.length, 10)
+  const scored = []
 
   for (let i = 0; i < limit; i++) {
     const candidate = candidates[i]
     const score = calculateMatchScore(original, candidate, config)
+    scored.push({ match: candidate, score })
 
-    logger(
-      'debug',
-      'Mirroring',
-      `Candidate ${i + 1}: "${candidate.info?.title || candidate.title}" | Score: ${score.toFixed(2)}`
-    )
+    logger('debug', 'Mirroring', `Candidate ${i + 1}: "${candidate.info?.title || candidate.title}" | Score: ${score.toFixed(2)}`)
+  }
 
-    if (score > bestScore) {
-      bestScore = score
-      bestMatch = candidate
+  return scored.sort((a, b) => b.score - a.score)
+}
+
+async function getValidatedStreamUrl(nodelink, match) {
+  const trackTitle = match?.info?.title || match?.title || 'unknown'
+
+  try {
+    logger('debug', 'Mirroring', `Validating stream URL for: "${trackTitle}"`)
+    const streamInfo = await nodelink.sources.getTrackUrl(match.info || match)
+
+    if (!streamInfo || streamInfo.exception || !streamInfo.url) {
+      const error = streamInfo?.exception?.message || 'No URL returned'
+      logger('debug', 'Mirroring', `Stream validation failed for "${trackTitle}": ${error}`)
+      return { valid: false, error }
     }
-    if (score >= 0.98) break
+
+    logger('debug', 'Mirroring', `Stream URL validated for "${trackTitle}": ${streamInfo.url}`)
+    return { valid: true, streamInfo }
+  } catch (e) {
+    logger('debug', 'Mirroring', `Stream validation exception for "${trackTitle}": ${e.message}`)
+    return { valid: false, error: e.message }
+  }
+}
+
+async function findValidMatch(nodelink, scoredMatches, minThreshold) {
+  for (const { match, score } of scoredMatches) {
+    if (score < minThreshold) {
+      logger('debug', 'Mirroring', `Score ${score.toFixed(2)} below threshold ${minThreshold.toFixed(2)}, stopping validation`)
+      break
+    }
+
+    const validation = await getValidatedStreamUrl(nodelink, match)
+    if (validation.valid) {
+      logger('info', 'Mirroring', `Found valid match: "${match?.info?.title || match?.title}" (score: ${score.toFixed(2)})`)
+      return { match, score, streamInfo: validation.streamInfo }
+    }
   }
 
-  if (bestScore >= minThreshold) {
-    return { match: bestMatch, score: bestScore }
-  }
-
-  return bestScore > 0 ? { match: bestMatch, score: bestScore } : null
+  return null
 }
 
 async function resolveMirrorTrack(nodelink, track) {
@@ -137,57 +160,81 @@ async function resolveMirrorTrack(nodelink, track) {
   let globalBestMatch = null
   let globalBestScore = 0.0
   let globalBestProvider = null
+  let globalBestStreamInfo = null
 
   for (const provider of providers) {
     const providerName = provider.name || 'unknown'
     const searchPrefix = provider.prefix || 'ytsearch'
     const useIsrc = provider.isrc !== false && track.isrc
 
-    let query = useIsrc 
+    const query = useIsrc 
       ? `${track.isrc.replace(/-/g, '')}`
       : `${track.author && track.author !== 'unknown' ? `${track.title} ${track.author}` : track.title}`
 
+    logger('debug', 'Mirroring', `Searching [${providerName}] with query: "${query}"`)
+
     let searchResult
     try {
-      
-      searchResult = await nodelink.sources.search(searchPrefix , query)
-      logger('debug', 'Mirroring', `Searching [${providerName}] with query: ${query}`)
-    
+      searchResult = await nodelink.sources.search(searchPrefix, query)
     } catch (e) {
-      logger('warn', 'Mirroring', `Provider [${providerName}] failed: ${e.message}`)
+      logger('warn', 'Mirroring', `Provider [${providerName}] search failed: ${e.message}`)
       continue
     }
 
-    if (searchResult.loadType !== 'search' || !searchResult.data?.length) continue
+    if (searchResult.loadType !== 'search' || !searchResult.data?.length) {
+      logger('debug', 'Mirroring', `No results from [${providerName}]`)
+      continue
+    }
 
-    const matchResult = findBestMatch(track, searchResult.data, config, config.highConfidenceThreshold)
+    const scoredMatches = getScoredMatches(track, searchResult.data, config)
 
-    if (!matchResult) {
-      const fallbackResult = findBestMatch(track, searchResult.data, config, 0)
-      if (fallbackResult && fallbackResult.score > globalBestScore) {
-        globalBestScore = fallbackResult.score
-        globalBestMatch = fallbackResult.match
-        globalBestProvider = providerName
+    if (scoredMatches.length === 0) continue
+
+    const topScore = scoredMatches[0].score
+
+    if (topScore >= config.immediateUseThreshold) {
+      logger('debug', 'Mirroring', `Top score ${topScore.toFixed(2)} >= immediate threshold, validating only top match`)
+      const result = await findValidMatch(nodelink, [scoredMatches[0]], config.immediateUseThreshold)
+      if (result) {
+        return { ...result, provider: providerName }
       }
-      continue
-    }
-
-    const { match, score } = matchResult
-    if (score > globalBestScore) {
-      globalBestScore = score
-      globalBestMatch = match
-      globalBestProvider = providerName
-    }
-
-    if (score >= config.immediateUseThreshold || score >= config.highConfidenceThreshold) {
-      return { match, score, provider: providerName }
+    } else if (topScore >= config.highConfidenceThreshold) {
+      logger('debug', 'Mirroring', `Top score ${topScore.toFixed(2)} >= high confidence, validating top 3 matches`)
+      const result = await findValidMatch(nodelink, scoredMatches.slice(0, 3), config.highConfidenceThreshold)
+      if (result) {
+        if (result.score > globalBestScore) {
+          globalBestScore = result.score
+          globalBestMatch = result.match
+          globalBestProvider = providerName
+          globalBestStreamInfo = result.streamInfo
+        }
+        if (result.score >= config.immediateUseThreshold) {
+          return { ...result, provider: providerName }
+        }
+      }
+    } else {
+      logger('debug', 'Mirroring', `Top score ${topScore.toFixed(2)} < high confidence, validating top 5 matches`)
+      const result = await findValidMatch(nodelink, scoredMatches.slice(0, 5), config.minSimilarityThreshold)
+      if (result && result.score > globalBestScore) {
+        globalBestScore = result.score
+        globalBestMatch = result.match
+        globalBestProvider = providerName
+        globalBestStreamInfo = result.streamInfo
+      }
     }
   }
 
-  if (globalBestMatch && globalBestScore >= config.minSimilarityThreshold) {
-    return { match: globalBestMatch, score: globalBestScore, provider: globalBestProvider }
+  if (globalBestMatch && globalBestScore >= config.minSimilarityThreshold && globalBestStreamInfo) {
+    logger('info', 'Mirroring', `Best match from [${globalBestProvider}]: "${globalBestMatch?.info?.title || 'unknown'}" (score: ${globalBestScore.toFixed(2)})`)
+    return { 
+      match: globalBestMatch, 
+      score: globalBestScore, 
+      provider: globalBestProvider,
+      streamInfo: globalBestStreamInfo
+    }
   }
 
+  logger('warn', 'Mirroring', 'No valid mirror found across all providers')
   return null
 }
 

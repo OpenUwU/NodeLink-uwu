@@ -734,6 +734,7 @@ export default class PandoraSource {
         logger(
           'info', "Pandora",`Using mirror from [${provider}] for "${decodedTrack.title}" (score: ${score.toFixed(2)})`)
         const streamInfo = await this.nodelink.sources.getTrackUrl(match.info || match)
+        
         return { newTrack: match, ...streamInfo }
         
       } catch (e){
