@@ -715,70 +715,6 @@ export default class PandoraSource {
     }
   }
 
-  /*async getTrackUrl(decodedTrack) {
-    const query = `${decodedTrack.title} ${decodedTrack.author}`
-
-    try {
-      let searchResult
-
-      if (decodedTrack.isrc) {
-        searchResult = await this.nodelink.sources.search(
-          'youtube',
-          `"${decodedTrack.isrc}"`,
-          'ytmsearch'
-        )
-        if (
-          searchResult.loadType !== 'search' ||
-          searchResult.data.length === 0
-        ) {
-          searchResult = null
-        }
-      }
-
-      if (!searchResult) {
-        searchResult = await this.nodelink.sources.search(
-          'youtube',
-          query,
-          'ytmsearch'
-        )
-      }
-
-      if (
-        searchResult.loadType !== 'search' ||
-        searchResult.data.length === 0
-      ) {
-        searchResult = await this.nodelink.sources.searchWithDefault(query)
-      }
-
-      if (
-        searchResult.loadType !== 'search' ||
-        searchResult.data.length === 0
-      ) {
-        return {
-          exception: {
-            message: 'No matching track found on default source.',
-            severity: 'common'
-          }
-        }
-      }
-
-      const bestMatch = getBestMatch(searchResult.data, decodedTrack)
-      if (!bestMatch) {
-        return {
-          exception: {
-            message: 'No suitable alternative found after filtering.',
-            severity: 'common'
-          }
-        }
-      }
-
-      const streamInfo = await this.nodelink.sources.getTrackUrl(bestMatch.info)
-      return { newTrack: bestMatch, ...streamInfo }
-    } catch (e) {
-      logger('error', 'Pandora', `Failed to mirror track: ${e.message}`)
-      return { exception: { message: e.message, severity: 'fault' } }
-    }
-  }*/
    async getTrackUrl(decodedTrack){
      logger(
       'debug', "Pandora",`Starting mirror resolution for "${decodedTrack.title}" by "${decodedTrack.author}"`)
@@ -806,6 +742,7 @@ export default class PandoraSource {
           'Pandora',
           `Mirror resolution failed for "${decodedTrack.title}": ${e.message}`
         )
+        return { exception: { message: e.message, severity: 'fault' } }
       }
    }
   

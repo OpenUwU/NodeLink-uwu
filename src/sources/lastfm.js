@@ -5,17 +5,13 @@ I added support for lfsearch:query in this file. you're welcome <3
 
 import {
   encodeTrack,
-  getBestMatch,
   http1makeRequest,
   logger
 } from '../utils.js'
+import { resolveMirrorTrack } from '../managers/mirroringResolver.js'
 
 const LASTFM_PATTERN =
   /^https?:\/\/(?:www\.)?last\.fm\/(?:[a-z]{2}\/)?music\/.+/
-const YOUTUBE_LINK_PATTERN =
-  /header-new-playlink[^>]*href="([^"]*youtube\.com[^"]+)"/
-const YOUTUBE_URL_PATTERN =
-  /https?:\/\/(?:www\.)?youtube\.com\/watch\?v=[a-zA-Z0-9_-]+/
 
 export default class LastFMSource {
   constructor(nodelink) {
@@ -103,122 +99,19 @@ export default class LastFMSource {
       const isTrack = path.includes('_') || path.length >= 4
 
       if (isTrack) {
-        const searchQuery = `${artist} - ${trackTitle} official audio`
-
-        const searchResult = await this.nodelink.sources.search(
-          'ytmsearch',
-          searchQuery
-        )
-
-        if (
-          searchResult.loadType === 'search' &&
-          searchResult.data?.length > 0
-        ) {
-          const bestTrack = searchResult.data[0]
-          logger(
-            'info',
-            'LastFM',
-            `Found official audio track: ${bestTrack.info.title} by ${bestTrack.info.author}`
-          )
-          return {
-            loadType: 'track',
-            data: {
-              ...bestTrack,
-              info: {
-                ...bestTrack.info,
-                uri: url,
-                sourceName: 'lastfm'
-              }
-            }
-          }
-        }
-
-        logger(
-          'warn',
-          'LastFM',
-          'No official audio found, attempting to search without "official audio" qualifier'
-        )
-        const fallbackSearch = await this.nodelink.sources.search(
-          'ytmsearch',
-          `${artist} - ${trackTitle}`
-        )
-
-        if (
-          fallbackSearch.loadType === 'search' &&
-          fallbackSearch.data?.length > 0
-        ) {
-          const bestTrack = fallbackSearch.data[0]
-          logger(
-            'info',
-            'LastFM',
-            `Found track via fallback: ${bestTrack.info.title} by ${bestTrack.info.author}`
-          )
-          return {
-            loadType: 'track',
-            data: {
-              ...bestTrack,
-              info: {
-                ...bestTrack.info,
-                uri: url,
-                sourceName: 'lastfm'
-              }
-            }
-          }
-        }
-
-        logger('error', 'LastFM', 'No tracks found for this Last.fm track')
         return {
-          exception: {
-            message: 'No matching tracks found for this Last.fm track',
-            severity: 'fault'
-          }
+          loadType: 'track',
+          data: this._buildTrackResult(trackTitle, artist, url)
         }
       } else {
-        // For albums/artists, try to extract YouTube URLs as before
-        const youtubeUrls = this._extractYouTubeUrls(body)
-
-        const tracks = []
-
-        // We try to resolve each YouTube URL found.
-        for (const youtubeUrl of youtubeUrls) {
-          const youtubeResult = await this.nodelink.sources.resolve(youtubeUrl)
-
-          if (youtubeResult.loadType === 'track') {
-            tracks.push({
-              ...youtubeResult.data,
-              info: {
-                ...youtubeResult.data.info,
-                uri: url,
-                sourceName: 'lastfm'
-              }
-            })
-          }
-        }
-
-        if (tracks.length) {
-          logger(
-            'info',
-            'LastFM',
-            `Resolved playlist: ${trackTitle} - ${artist} with ${tracks.length} tracks`
-          )
-          return {
-            loadType: 'playlist',
-            data: {
-              info: { name: `${trackTitle} - ${artist}`, selectedTrack: 0 },
-              pluginInfo: {},
-              tracks
-            }
-          }
-        }
-
         logger(
           'error',
           'LastFM',
-          'Failed to resolve any tracks from Last.fm album/artist'
+          'Album/artist resolution not supported without individual track URLs'
         )
         return {
           exception: {
-            message: 'Failed to resolve tracks from Last.fm',
+            message: 'Album/artist resolution requires API key',
             severity: 'fault'
           }
         }
@@ -248,31 +141,6 @@ export default class LastFMSource {
     }
   }
 
-  _extractYouTubeUrl(html) {
-    const playLinkMatch = html.match(YOUTUBE_LINK_PATTERN)
-    if (playLinkMatch) return playLinkMatch[1]
-
-    const youtubeMatch = html.match(YOUTUBE_URL_PATTERN)
-    return youtubeMatch ? youtubeMatch[0] : null
-  }
-
-  _extractYouTubeUrls(html) {
-    const urls = new Set()
-
-    const playMatch = html.match(YOUTUBE_LINK_PATTERN)
-    if (playMatch) {
-      urls.add(playMatch[1])
-    }
-
-    const regex = new RegExp(YOUTUBE_URL_PATTERN, 'g')
-    let match
-    while ((match = regex.exec(html)) !== null) {
-      urls.add(match[0])
-    }
-
-    return Array.from(urls)
-  }
-
   _createError(message, severity) {
     return {
       loadType: 'error',
@@ -281,57 +149,45 @@ export default class LastFMSource {
   }
 
   async getTrackUrl(decodedTrack) {
+    logger(
+      'debug',
+      'LastFM',
+      `Starting mirror resolution for "${decodedTrack.title}" by "${decodedTrack.author}"`
+    )
+
     try {
-      const youtubeUrl = decodedTrack?.pluginInfo?.youtubeUrl
-      if (youtubeUrl) {
-        const youtubeResult = await this.nodelink.sources.resolve(youtubeUrl)
-        if (youtubeResult?.loadType === 'track') {
-          const streamInfo = await this.nodelink.sources.getTrackUrl(
-            youtubeResult.data.info
-          )
-          return { newTrack: youtubeResult.data, ...streamInfo }
+      const mirrorResult = await resolveMirrorTrack(this.nodelink, decodedTrack)
+
+      if (!mirrorResult || !mirrorResult.match) {
+        logger(
+          'warn',
+          'LastFM',
+          `No mirror found for "${decodedTrack.title}"`
+        )
+        return {
+          exception: {
+            message: 'No suitable mirror source found for track',
+            severity: 'fault'
+          }
         }
       }
 
-      const query = `${decodedTrack.title} ${decodedTrack.author}`.trim()
-      let searchResult = await this.nodelink.sources.search(
-        'youtube',
-        query,
-        'ytmsearch'
+      const { match, score, provider } = mirrorResult
+
+      logger(
+        'info',
+        'LastFM',
+        `Using mirror from [${provider}] for "${decodedTrack.title}" (score: ${score.toFixed(2)})`
       )
 
-      if (
-        searchResult.loadType !== 'search' ||
-        searchResult.data.length === 0
-      ) {
-        searchResult = await this.nodelink.sources.searchWithDefault(query)
-      }
-
-      if (
-        searchResult.loadType !== 'search' ||
-        searchResult.data.length === 0
-      ) {
-        return {
-          exception: {
-            message: 'No matching track found on default source.',
-            severity: 'common'
-          }
-        }
-      }
-
-      const bestMatch = getBestMatch(searchResult.data, decodedTrack)
-      if (!bestMatch) {
-        return {
-          exception: {
-            message: 'No suitable alternative found after filtering.',
-            severity: 'common'
-          }
-        }
-      }
-
-      const streamInfo = await this.nodelink.sources.getTrackUrl(bestMatch.info)
-      return { newTrack: bestMatch, ...streamInfo }
+      const streamInfo = await this.nodelink.sources.getTrackUrl(match.info || match)
+      return { newTrack: match, ...streamInfo }
     } catch (e) {
+      logger(
+        'error',
+        'LastFM',
+        `Mirror resolution failed for "${decodedTrack.title}": ${e.message}`
+      )
       return { exception: { message: e.message, severity: 'fault' } }
     }
   }

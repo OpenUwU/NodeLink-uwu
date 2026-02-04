@@ -1,10 +1,11 @@
 import crypto from 'node:crypto'
 import {
   encodeTrack,
-  getBestMatch,
   http1makeRequest,
   logger
 } from '../utils.js'
+
+import { resolveMirrorTrack } from '../managers/mirroringResolver.js'
 
 const API_URL = 'https://www.qobuz.com/api.json/0.2'
 const WEB_PLAYER_BASE_URL = 'https://play.qobuz.com'
@@ -378,32 +379,27 @@ export default class QobuzSource {
   }
 
   async _getMirrorUrl(decodedTrack) {
-    const query = `${decodedTrack.title} ${decodedTrack.author}`
-    try {
-      let result = null
-
-      if (decodedTrack.isrc) {
-        result = await this.nodelink.sources.search('youtube', `"${decodedTrack.isrc}"`, 'ytmsearch')
+    logger('debug', 'Qobuz',`Starting mirror resolution for "${decodedTrack.title}"`)
+    try{
+      const mirrorResult = await resolveMirrorTrack(this.nodelink, decodedTrack)
+      if(!mirrorResult || !mirrorResult.match){
+        logger(
+          'warn', "Qobuz",`No mirror found for "${decodedTrack.title}"`)
+          return {
+            exception: {
+              message: 'No suitable mirror source found for track',
+              severity: 'fault'
+            }
+          }
       }
-
-      if (!result || result.loadType !== 'search' || !result.data.length) {
-        result = await this.nodelink.sources.searchWithDefault(query)
-      }
-
-      if (result.loadType !== 'search' || !result.data.length) {
-        return { exception: { message: 'No mirror found for this track.', severity: 'common' } }
-      }
-
-      const best = getBestMatch(result.data, decodedTrack, { 
-        allowExplicit: this.config.sources.qobuz?.allowExplicit ?? true 
-      })
-
-      if (!best) return { exception: { message: 'No suitable match found.', severity: 'common' } }
-
-      const stream = await this.nodelink.sources.getTrackUrl(best.info)
-      return { newTrack: best, ...stream }
-    } catch (e) {
-      logger('error', 'Qobuz', `Mirroring failed: ${e.message}`)
+      const { match, score, provider } = mirrorResult
+      logger(
+        'info', "Qobuz",`Using mirror from [${provider}] for "${decodedTrack.title}" (score: ${score.toFixed(2)})`)
+      const streamInfo = await this.nodelink.sources.getTrackUrl(match.info || match)
+      return { newTrack: match, ...streamInfo }
+    } catch(e) {
+      logger(
+        'error','Qobuz',`Mirror resolution failed for "${decodedTrack.title}":`)
       return { exception: { message: e.message, severity: 'fault' } }
     }
   }
@@ -412,7 +408,7 @@ export default class QobuzSource {
     let query = `${track.title} ${track.author}`
     if (isExplicit && !(this.config.sources.qobuz?.allowExplicit ?? true)) {
        query += ' clean version'
-    }
+    }  
     return query
   }
 }

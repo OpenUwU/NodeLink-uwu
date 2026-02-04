@@ -1,10 +1,11 @@
 import path from 'node:path'
 import {
   encodeTrack,
-  getBestMatch,
   http1makeRequest,
   logger
 } from '../utils.js'
+
+import { resolveMirrorTrack } from '../managers/mirroringResolver.js'
 
 const API_BASE = 'https://api.tidal.com/v1/'
 const CACHE_VALIDITY_DAYS = 7
@@ -301,69 +302,32 @@ export default class TidalSource {
     }
   }
 
-  async getTrackUrl(decodedTrack, itag, forceRefresh = false) {
-    const query = `${decodedTrack.title} ${decodedTrack.author}`
-
-    try {
-      let searchResult
-
-      if (decodedTrack.isrc) {
-        searchResult = await this.nodelink.sources.search(
-          'youtube',
-          `"${decodedTrack.isrc}"`,
-          'ytmsearch'
-        )
-        if (
-          searchResult.loadType !== 'search' ||
-          searchResult.data.length === 0
-        ) {
-          searchResult = null
+  async getTrackUrl(decodedTrack){
+    logger(
+      'debug', "Tidal",`Starting mirror resolution for "${decodedTrack.title}" by "${decodedTrack.author}"`)
+      try{
+        const mirrorResult = await resolveMirrorTrack(this.nodelink, decodedTrack)
+        if(!mirrorResult || !mirrorResult.match){
+          logger(
+            'warn', "Tidal",`No mirror found for "${decodedTrack.title}"`)
+            return {
+              exception: {
+                message: 'No suitable mirror source found for track',
+                severity: 'fault'
+              }
+            }
         }
+        const { match, score, provider } = mirrorResult
+        logger(
+          'info', "Tidal",`Using mirror from [${provider}] for "${decodedTrack.title}" (score: ${score.toFixed(2)})`)
+        const streamInfo = await this.nodelink.sources.getTrackUrl(match.info || match)
+        return { newTrack: match, ...streamInfo }
+      } catch(e) {
+        logger(
+          'error',
+          'Tidal',`Mirror resolution failed for "${decodedTrack.title}":`)
+        return { exception: { message: e.message, severity: 'fault' } }
       }
-
-      if (!searchResult) {
-        searchResult = await this.nodelink.sources.search(
-          'youtube',
-          query,
-          'ytmsearch'
-        )
-      }
-
-      if (
-        searchResult.loadType !== 'search' ||
-        searchResult.data.length === 0
-      ) {
-        searchResult = await this.nodelink.sources.searchWithDefault(query)
-      }
-
-      if (
-        searchResult.loadType !== 'search' ||
-        searchResult.data.length === 0
-      ) {
-        return {
-          exception: {
-            message: 'No matching track found on default source.',
-            severity: 'common'
-          }
-        }
-      }
-
-      const bestMatch = getBestMatch(searchResult.data, decodedTrack)
-      if (!bestMatch) {
-        return {
-          exception: {
-            message: 'No suitable alternative found after filtering.',
-            severity: 'common'
-          }
-        }
-      }
-
-      const streamInfo = await this.nodelink.sources.getTrackUrl(bestMatch.info, itag, forceRefresh)
-      return { newTrack: bestMatch, ...streamInfo }
-    } catch (e) {
-      logger('error', 'Tidal', `Failed to mirror track: ${e.message}`)
-      return { exception: { message: e.message, severity: 'fault' } }
-    }
   }
 
   async loadStream(_track, _url, _protocol, _additionalData) {

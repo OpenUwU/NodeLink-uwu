@@ -1,9 +1,10 @@
 import {
   encodeTrack,
-  getBestMatch,
   http1makeRequest,
   logger
 } from '../utils.js'
+
+import { resolveMirrorTrack } from '../managers/mirroringResolver.js'
 
 export default class ShazamSource {
   constructor(nodelink) {
@@ -314,72 +315,32 @@ export default class ShazamSource {
     }
   }
 
-  async getTrackUrl(decodedTrack) {
-    try {
-      const query = `${decodedTrack.title} ${decodedTrack.author}`
-      const hasResults = (r) => r?.loadType === 'search' && r.data?.length
-
-      let searchResult
-
-      if (decodedTrack.isrc) {
-        searchResult = await this.nodelink.sources.search(
-          'youtube',
-          `"${decodedTrack.isrc}"`,
-          'ytmsearch'
-        )
-
-        if (hasResults(searchResult)) {
+ async getTrackUrl(decodedTrack){
+    logger(
+      'debug', "Shazam",`Starting mirror resolution for "${decodedTrack.title}" by "${decodedTrack.author}"`)
+      try{
+        const mirrorResult = await resolveMirrorTrack(this.nodelink, decodedTrack)
+        if(!mirrorResult || !mirrorResult.match){
           logger(
-            'debug',
-            'Shazam',
-            `Found result via ISRC: ${decodedTrack.isrc}`
-          )
+            'warn', "Shazam",`No mirror found for "${decodedTrack.title}"`)
+            return {
+              exception: {
+                message: 'No suitable mirror source found for track',
+                severity: 'fault'
+              }
+            }
         }
+        const { match, score, provider } = mirrorResult
+        logger(
+          'info', "Shazam",`Using mirror from [${provider}] for "${decodedTrack.title}" (score: ${score.toFixed(2)})`)
+        const streamInfo = await this.nodelink.sources.getTrackUrl(match.info || match)
+        return { newTrack: match, ...streamInfo }
+      } catch(e) {
+        logger(
+          'error','Shazam',`Mirror resolution failed for "${decodedTrack.title}":`)
+        return { exception: { message: e.message, severity: 'fault' } }
       }
-
-      if (!hasResults(searchResult)) {
-        if (decodedTrack.isrc) {
-          logger(
-            'debug',
-            'Shazam',
-            `ISRC search failed for ${decodedTrack.isrc}, falling back to text query`
-          )
-        }
-
-        searchResult = await this.nodelink.sources.search(
-          'youtube',
-          query,
-          'ytmsearch'
-        )
-      }
-
-      if (!hasResults(searchResult)) {
-        searchResult = await this.nodelink.sources.searchWithDefault(query)
-      }
-
-      if (!hasResults(searchResult)) {
-        return {
-          exception: { message: 'No alternative found.', severity: 'fault' }
-        }
-      }
-
-      const bestMatch = getBestMatch(searchResult.data, decodedTrack, {
-        allowExplicit: this.allowExplicit
-      })
-
-      if (!bestMatch) {
-        return {
-          exception: { message: 'No suitable match.', severity: 'fault' }
-        }
-      }
-
-      const stream = await this.nodelink.sources.getTrackUrl(bestMatch.info)
-      return { newTrack: bestMatch, ...stream }
-    } catch (error) {
-      logger('error', 'Shazam', `Failed to get track URL: ${error.message}`)
-      return { exception: { message: error.message, severity: 'fault' } }
-    }
-  }
+ }
 
   _buildTrack(item) {
     if (!item?.id) return null

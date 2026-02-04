@@ -10,14 +10,14 @@ Credits:
 ## Patches 
 
 - Implement new mirroring resolver in all mirrored sources
-  - Spotify ✓
-  - Amazon Music ✓
-  - Apple Music ✓
-  - Last.fm
-  - Pandora ✓
+  - Spotify 
+  - Amazon Music 
+  - Apple Music 
+  - Last.fm 
+  - Pandora 
   - Qobuz
   - Shazam
-  - Tidal
+  - Tidal 
   - deezer (fallback method)
 - Delete sources which are unlikely to be used in my bot
    - yandex

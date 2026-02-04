@@ -6,9 +6,9 @@ import {
   encodeTrack,
   http1makeRequest,
   logger,
-  getBestMatch,
   makeRequest
 } from '../utils.js'
+import { resolveMirrorTrack } from '../managers/mirroringResolver.js'
 
 const IV = Buffer.from([0, 1, 2, 3, 4, 5, 6, 7])
 const ISRC_REGEX = /^(?:isrc:)?([A-Z]{2}-?[A-Z0-9]{3}-?\d{2}-?\d{5})$/i
@@ -393,7 +393,6 @@ export default class DeezerSource {
     }
     return body
   }
-
   async getTrackUrl(decodedTrack, itag, forceRefresh = false) {
     if (!forceRefresh) {
       const cached = this.nodelink.trackCacheManager.get(
@@ -402,7 +401,6 @@ export default class DeezerSource {
       )
       if (cached) return cached
     }
-
     if (this.licenseToken) {
       try {
         const { body: trackData } = await makeRequest(
@@ -417,14 +415,12 @@ export default class DeezerSource {
         if (trackData.error && trackData.error.length > 0) {
           throw new Error(Object.values(trackData.error).join('; '))
         }
-
         if (
           trackData.results &&
           trackData.results.data &&
           trackData.results.data.length > 0
         ) {
           const trackInfo = trackData.results.data[0]
-
           const { body: streamData } = await makeRequest(
             'https://media.deezer.com/v1/get_url',
             {
@@ -447,7 +443,6 @@ export default class DeezerSource {
               disableBodyCompression: true
             }
           )
-
           if (
             streamData.data &&
             streamData.data[0] &&
@@ -476,51 +471,52 @@ export default class DeezerSource {
         logger(
           'warn',
           'Deezer',
-          `Direct stream failed for ${decodedTrack.title}: ${e.message}. Falling back to YouTube.`
+          `Direct stream failed for ${decodedTrack.title}: ${e.message}. Falling back to mirror resolution.`
         )
       }
     }
 
-    let searchResult
-    if (decodedTrack.isrc) {
-      searchResult = await this.nodelink.sources.search(
-        'youtube',
-        `"${decodedTrack.isrc}"`,
-        'ytmsearch'
-      )
-      if (
-        searchResult.loadType !== 'search' ||
-        searchResult.data.length === 0
-      ) {
-        searchResult = await this.nodelink.sources.search(
-          'youtube',
-          `${decodedTrack.title} ${decodedTrack.author}`,
-          'ytmsearch'
+    logger(
+      'debug',
+      'Deezer',
+      `Starting mirror resolution for "${decodedTrack.title}" by "${decodedTrack.author}"`
+    )
+
+    try {
+      const mirrorResult = await resolveMirrorTrack(this.nodelink, decodedTrack)
+
+      if (!mirrorResult || !mirrorResult.match) {
+        logger(
+          'warn',
+          'Deezer',
+          `No mirror found for "${decodedTrack.title}"`
         )
-      }
-    }
-
-    if (
-      !searchResult ||
-      searchResult.loadType !== 'search' ||
-      searchResult.data.length === 0
-    ) {
-      searchResult = await this.nodelink.sources.searchWithDefault(
-        `${decodedTrack.title} ${decodedTrack.author}`
-      )
-    }
-
-    const bestMatch = getBestMatch(searchResult.data, decodedTrack)
-    if (!bestMatch)
-      return {
-        exception: {
-          message: 'No suitable alternative found.',
-          severity: 'fault'
+        return {
+          exception: {
+            message: 'No suitable mirror source found for track',
+            severity: 'fault'
+          }
         }
       }
 
-    const streamInfo = await this.nodelink.sources.getTrackUrl(bestMatch.info)
-    return { newTrack: bestMatch, ...streamInfo }
+      const { match, score, provider } = mirrorResult
+
+      logger(
+        'info',
+        'Deezer',
+        `Using mirror from [${provider}] for "${decodedTrack.title}" (score: ${score.toFixed(2)})`
+      )
+
+      const streamInfo = await this.nodelink.sources.getTrackUrl(match.info || match, itag, forceRefresh)
+      return { newTrack: match, ...streamInfo }
+    } catch (error) {
+      logger(
+        'error',
+        'Deezer',
+        `Mirror resolution failed for "${decodedTrack.title}": ${error.message}`
+      )
+      return { exception: { message: error.message, severity: 'fault' } }
+    }
   }
 
   loadStream(decodedTrack, url, _format, additionalData) {
