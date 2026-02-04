@@ -1,10 +1,10 @@
 import {
   encodeTrack,
-  getBestMatch,
   http1makeRequest,
   logger
 } from '../utils.js'
 import crypto from 'node:crypto'
+import { resolveMirrorTrack } from '../managers/mirroringResolver.js'
 
 const BOT_USER_AGENT =
   'Mozilla/5.0 (compatible; NodeLinkBot/0.1; +https://nodelink.js.org/)'
@@ -687,66 +687,48 @@ export default class AmazonMusicSource {
   }
 
   async getTrackUrl(decodedTrack, itag, forceRefresh = false) {
-    const query = `${decodedTrack.title} ${decodedTrack.author}`
+    logger(
+      'debug',
+      'AmazonMusic',
+      `Starting mirror resolution for "${decodedTrack.title}" by "${decodedTrack.author}"`
+    )
 
     try {
-      let searchResult
+      const mirrorResult = await resolveMirrorTrack(this.nodelink, decodedTrack)
 
-      if (decodedTrack.isrc) {
-        searchResult = await this.nodelink.sources.search(
-          'youtube',
-          `"${decodedTrack.isrc}"`,
-          'ytmsearch'
+      if (!mirrorResult || !mirrorResult.match) {
+        logger(
+          'warn',
+          'AmazonMusic',
+          `No mirror found for "${decodedTrack.title}"`
         )
-        if (
-          searchResult.loadType !== 'search' ||
-          searchResult.data.length === 0
-        )
-          searchResult = null
+        return {
+          exception: {
+            message: 'No suitable mirror source found for track',
+            severity: 'fault'
+          }
+        }
       }
 
-      if (!searchResult) {
-        searchResult = await this.nodelink.sources.search(
-          'youtube',
-          query,
-          'ytmsearch'
-        )
-      }
+      const { match, score, provider } = mirrorResult
 
-      if (
-        searchResult.loadType !== 'search' ||
-        searchResult.data.length === 0
-      ) {
-        searchResult = await this.nodelink.sources.searchWithDefault(query)
-      }
-
-      if (
-        searchResult.loadType !== 'search' ||
-        searchResult.data.length === 0
-      ) {
-        throw new Error('No alternative stream found via default search.')
-      }
-
-      const bestMatch = getBestMatch(searchResult.data, decodedTrack)
-      if (!bestMatch)
-        throw new Error('No suitable alternative stream found after filtering.')
-
-      const streamInfo = await this.nodelink.sources.getTrackUrl(
-        bestMatch.info,
-        itag,
-        forceRefresh
+      logger(
+        'info',
+        'AmazonMusic',
+        `Using mirror from [${provider}] for "${decodedTrack.title}" (score: ${score.toFixed(2)})`
       )
-      return { newTrack: bestMatch, ...streamInfo }
+
+      const streamInfo = await this.nodelink.sources.getTrackUrl(match.info || match, itag, forceRefresh)
+      return { newTrack: match, ...streamInfo }
     } catch (e) {
       logger(
-        'warn',
+        'error',
         'AmazonMusic',
-        `Mirror search for "${query}" failed: ${e.message}`
+        `Mirror resolution failed for "${decodedTrack.title}": ${e.message}`
       )
-      throw e
+      return { exception: { message: e.message, severity: 'fault' } }
     }
   }
-
   async loadStream() {
     return null
   }

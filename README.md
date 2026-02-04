@@ -7,15 +7,31 @@ Credits:
 - NodeLink source: https://github.com/PerformanC/NodeLink
 - All core code and design belong to the original authors
 
-## Todo
+## Patches 
 
-- Implement mirroring in all mirrored sources
+- Implement new mirroring resolver in all mirrored sources
   - Spotify ✓
-  - Amazon Music
-  - Apple Music
+  - Amazon Music ✓
+  - Apple Music ✓
   - Last.fm
-  - Pandora
+  - Pandora ✓
   - Qobuz
   - Shazam
   - Tidal
-  - Yandex Music
+  - deezer (fallback method)
+- Delete sources which are unlikely to be used in my bot
+   - yandex
+   - anghami
+   - bluesky
+   - instagram
+   - kwai
+   - pinterest
+   - rss
+   - Reddit
+   - telegram
+   - tumblr
+   - twitch
+   - twitter
+   - vimeo
+   - letrasmus
+   - vkmusic

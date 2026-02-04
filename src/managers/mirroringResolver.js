@@ -140,17 +140,19 @@ async function resolveMirrorTrack(nodelink, track) {
 
   for (const provider of providers) {
     const providerName = provider.name || 'unknown'
-    const searchPrefix = provider.prefix || provider.type || 'ytsearch'
+    const searchPrefix = provider.prefix || 'ytsearch'
     const useIsrc = provider.isrc !== false && track.isrc
 
     let query = useIsrc 
-      ? `${searchPrefix}:"${track.isrc.replace(/-/g, '')}"`
-      : `${searchPrefix}:${track.author && track.author !== 'unknown' ? `${track.title} ${track.author}` : track.title}`
+      ? `${track.isrc.replace(/-/g, '')}`
+      : `${track.author && track.author !== 'unknown' ? `${track.title} ${track.author}` : track.title}`
 
     let searchResult
     try {
-      const sourceName = (providerName === 'youtube' || providerName === 'ytm') ? 'youtube' : providerName
-      searchResult = await nodelink.sources.search(sourceName, query.split(':')[1] || query, searchPrefix)
+      
+      searchResult = await nodelink.sources.search(searchPrefix , query)
+      logger('debug', 'Mirroring', `Searching [${providerName}] with query: ${query}`)
+    
     } catch (e) {
       logger('warn', 'Mirroring', `Provider [${providerName}] failed: ${e.message}`)
       continue

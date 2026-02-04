@@ -1,10 +1,10 @@
 import {
   encodeTrack,
-  getBestMatch,
   http1makeRequest,
   logger,
   makeRequest
 } from '../utils.js'
+import { resolveMirrorTrack } from '../managers/mirroringResolver.js'
 
 export default class PandoraSource {
   constructor(nodelink) {
@@ -715,7 +715,7 @@ export default class PandoraSource {
     }
   }
 
-  async getTrackUrl(decodedTrack) {
+  /*async getTrackUrl(decodedTrack) {
     const query = `${decodedTrack.title} ${decodedTrack.author}`
 
     try {
@@ -778,5 +778,36 @@ export default class PandoraSource {
       logger('error', 'Pandora', `Failed to mirror track: ${e.message}`)
       return { exception: { message: e.message, severity: 'fault' } }
     }
-  }
+  }*/
+   async getTrackUrl(decodedTrack){
+     logger(
+      'debug', "Pandora",`Starting mirror resolution for "${decodedTrack.title}" by "${decodedTrack.author}"`)
+      try{
+        const mirrorResult = await resolveMirrorTrack(this.nodelink, decodedTrack)
+        if(!mirrorResult || !mirrorResult.match){
+          logger(
+            'warn', "Pandora",`No mirror found for "${decodedTrack.title}"`)
+            return {
+              exception: {
+                message: 'No suitable mirror source found for track',
+                severity: 'fault'
+              }
+            }
+        }
+        const { match, score, provider } = mirrorResult
+        logger(
+          'info', "Pandora",`Using mirror from [${provider}] for "${decodedTrack.title}" (score: ${score.toFixed(2)})`)
+        const streamInfo = await this.nodelink.sources.getTrackUrl(match.info || match)
+        return { newTrack: match, ...streamInfo }
+        
+      } catch (e){
+         logger(
+          'error',
+          'Pandora',
+          `Mirror resolution failed for "${decodedTrack.title}": ${e.message}`
+        )
+      }
+   }
+  
+  
 }

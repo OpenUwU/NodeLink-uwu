@@ -1,10 +1,11 @@
 import path from 'node:path'
 import {
   encodeTrack,
-  getBestMatch,
   http1makeRequest,
   logger
 } from '../utils.js'
+
+import { resolveMirrorTrack } from '../managers/mirroringResolver.js'
 
 const API_BASE = 'https://api.music.apple.com/v1'
 const MAX_PAGE_ITEMS = 300
@@ -492,83 +493,49 @@ export default class AppleMusicSource {
 
     return results
   }
-
   async getTrackUrl(decodedTrack, itag, forceRefresh = false) {
-    let isExplicit = false
-    if (decodedTrack.uri) {
-      try {
-        const url = new URL(decodedTrack.uri)
-        isExplicit = url.searchParams.get('explicit') === 'true'
-      } catch (_error) {
-        // Ignore malformed URI
-      }
-    }
+    
 
-    const query = this._buildSearchQuery(decodedTrack, isExplicit)
+    logger(
+      'debug',
+      'AmazonMusic',
+      `Starting mirror resolution for "${decodedTrack.title}" by "${decodedTrack.author}"`
+    )
 
     try {
-      let searchResult
+      const mirrorResult = await resolveMirrorTrack(this.nodelink, decodedTrack)
 
-      if (decodedTrack.isrc) {
-        searchResult = await this.nodelink.sources.search(
-          'youtube',
-          `"${decodedTrack.isrc}"`,
-          'ytmsearch'
+      if (!mirrorResult || !mirrorResult.match) {
+        logger(
+          'warn',
+          'AmazonMusic',
+          `No mirror found for "${decodedTrack.title}"`
         )
-        if (
-          searchResult.loadType !== 'search' ||
-          searchResult.data.length === 0
-        ) {
-          searchResult = null
-        }
-      }
-
-      if (!searchResult) {
-        searchResult = await this.nodelink.sources.search(
-          'youtube',
-          query,
-          'ytmsearch'
-        )
-      }
-
-      if (
-        searchResult.loadType !== 'search' ||
-        searchResult.data.length === 0
-      ) {
-        searchResult = await this.nodelink.sources.searchWithDefault(query)
-      }
-
-      if (
-        searchResult.loadType !== 'search' ||
-        searchResult.data.length === 0
-      ) {
         return {
-          exception: { message: 'No alternative found.', severity: 'fault' }
+          exception: {
+            message: 'No suitable mirror source found for track',
+            severity: 'fault'
+          }
         }
       }
 
-      const bestMatch = getBestMatch(searchResult.data, decodedTrack, {
-        allowExplicit: this.allowExplicit
-      })
+      const { match, score, provider } = mirrorResult
 
-      if (!bestMatch) {
-        return {
-          exception: { message: 'No suitable match.', severity: 'fault' }
-        }
-      }
+      logger(
+        'info',
+        'AmazonMusic',
+        `Using mirror from [${provider}] for "${decodedTrack.title}" (score: ${score.toFixed(2)})`
+      )
 
-      const stream = await this.nodelink.sources.getTrackUrl(bestMatch.info, itag, forceRefresh)
-      return { newTrack: bestMatch, ...stream }
+      const stream = await this.nodelink.sources.getTrackUrl(match.info || match, itag, forceRefresh)
+      return { newTrack: match, ...stream }
     } catch (error) {
+      logger(
+        'error',
+        'AmazonMusic',
+        `Mirror resolution failed for "${decodedTrack.title}": ${error.message}`
+      )
       return { exception: { message: error.message, severity: 'fault' } }
     }
-  }
-
-  _buildSearchQuery(track, isExplicit) {
-    let searchQuery = `${track.title} ${track.author}`
-    if (isExplicit) {
-      searchQuery += this.allowExplicit ? ' official video' : ' clean version'
-    }
-    return searchQuery
   }
 }
