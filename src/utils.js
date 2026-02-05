@@ -10,6 +10,8 @@ import { URL } from 'node:url'
 import util from 'node:util'
 import zlib from 'node:zlib'
 
+const hasZstd = !!zlib.createZstdDecompress
+
 import packageJson from '../package.json' with { type: 'json' }
 import {
   DEFAULT_MAX_REDIRECTS,
@@ -315,9 +317,10 @@ function sendResponse(req, res, data, status, trace = false) {
     { type: 'gzip', method: zlib.gzip },
     { type: 'deflate', method: zlib.deflate }
   ]
-  if (process.versions.node >= '22.0.0' || process.isBun) {
+  if (hasZstd) {
     compressions.unshift({ type: 'zstd', method: zlib.zstdCompress })
   }
+
 
   for (const { type, method } of compressions) {
     if (encoding.includes(type)) {
@@ -328,9 +331,7 @@ function sendResponse(req, res, data, status, trace = false) {
           res.end(JSON.stringify({ error: 'Compression failed' }))
           return
         }
-        if (process.isBun) {
-          headers['Content-Length'] = result.byteLength
-        }
+        headers['Content-Length'] = result.byteLength
         res.writeHead(status, headers)
         res.end(result)
       })
@@ -346,17 +347,6 @@ function sendResponse(req, res, data, status, trace = false) {
 function getGitInfo() {
   if (typeof __BUILD_GIT_INFO__ !== 'undefined') {
     return __BUILD_GIT_INFO__
-  }
-
-  const isBun = typeof Bun !== 'undefined' && !!process.versions.bun
-  // bun is too weird
-  if (isBun) {
-    logger('info', 'Git', 'Skipping update check (compiled build).')
-    return {
-      branch: 'unknown',
-      commit: 'unknown',
-      commitTime: -1
-    }
   }
 
   if (gitInfoCache) return gitInfoCache
@@ -937,8 +927,11 @@ async function _internalHttp1Request(urlString, options = {}) {
   const lib = isHttps ? https : http
   const agent = customAgent || (isHttps ? httpsAgent : httpAgent)
 
+  const acceptEncoding = ['br', 'gzip', 'deflate']
+  if (hasZstd) acceptEncoding.unshift('zstd')
+
   const reqHeaders = {
-    'Accept-Encoding': 'br, gzip, deflate',
+    'Accept-Encoding': acceptEncoding.join(', '),
     'User-Agent':
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36',
     ...customHeaders
@@ -1010,7 +1003,9 @@ async function _internalHttp1Request(urlString, options = {}) {
 
       let finalStream = res
       const encoding = (respHeaders['content-encoding'] || '').toLowerCase()
-      if (encoding === 'br') {
+      if (encoding === 'zstd' && hasZstd) {
+        finalStream = res.pipe(zlib.createZstdDecompress())
+      } else if (encoding === 'br') {
         finalStream = res.pipe(zlib.createBrotliDecompress())
       } else if (encoding === 'gzip') {
         finalStream = res.pipe(zlib.createGunzip())
@@ -1219,7 +1214,9 @@ async function makeRequest(urlString, options, nodelink) {
         ':path': currentUrl.pathname + currentUrl.search,
         ':scheme': currentUrl.protocol.slice(0, -1),
         ':authority': currentUrl.host,
-        'accept-encoding': 'br, gzip, deflate',
+        'accept-encoding': hasZstd
+          ? 'zstd, br, gzip, deflate'
+          : 'br, gzip, deflate',
         'user-agent': 'Mozilla/5.0 (Node.js Http2Client)',
         dnt: '1',
         ...customHeaders
@@ -1306,7 +1303,9 @@ async function makeRequest(urlString, options, nodelink) {
 
         let responseStream = req
         const encoding = headers['content-encoding']
-        if (encoding === 'br')
+        if (encoding === 'zstd' && hasZstd)
+          responseStream = req.pipe(zlib.createZstdDecompress())
+        else if (encoding === 'br')
           responseStream = req.pipe(zlib.createBrotliDecompress())
         else if (encoding === 'gzip')
           responseStream = req.pipe(zlib.createGunzip())
@@ -1619,13 +1618,6 @@ async function loadHLSPlaylist(url, stream) {
 }
 
 async function checkForUpdates() {
-  const isBun = typeof Bun !== 'undefined' && !!process.versions.bun
-  // bun is too weird
-  if (isBun) {
-    logger('info', 'Git', 'Skipping update check (compiled build).')
-    return
-  }
-
   logger('info', 'Git', 'Checking for updates...')
   try {
     execSync('git fetch', { stdio: 'ignore' })
