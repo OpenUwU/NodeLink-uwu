@@ -42,3 +42,6 @@ Credits:
    - googletts
    - flowery
    - songlink
+   - bilibili
+   - pandora
+   - qobuz 
