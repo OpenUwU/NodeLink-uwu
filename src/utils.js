@@ -142,69 +142,72 @@ function initLogger(config) {
   currentLogLevel = logLevels[loggingConfig.level || 'info']
   initFileLogger()
 }
-
 function logger(level, ...args) {
   const effectiveLevel =
     level === 'sources' || level === 'started' || level === 'network'
       ? 'info'
       : level
-  const levelIndex = logLevels[effectiveLevel]
 
+  const levelIndex = logLevels[effectiveLevel]
   if (levelIndex === undefined || levelIndex < currentLogLevel) return
 
   const category = args.length > 1 ? args[0] : ''
 
   if (level === 'debug') {
     const debugConfig = loggingConfig.debug || {}
-    const categoryKey =
-      typeof category === 'string' ? category.toLowerCase() : category
-    const categoryEnabled =
-      debugConfig[category] ??
-      (categoryKey ? debugConfig[categoryKey] : undefined)
+    const key = typeof category === 'string' ? category.toLowerCase() : category
+    const enabled =
+      debugConfig[category] ?? (key ? debugConfig[key] : undefined)
 
     if (debugConfig.all) {
-      if (categoryEnabled === false) return
-    } else if (!categoryEnabled) {
+      if (enabled === false) return
+    } else if (!enabled) {
       return
     }
   }
 
   const levels = {
-    info: { label: 'INFO', color: '\x1b[1m\x1b[3;42m' },
-    warn: { label: 'WARN', color: '\x1b[1m\x1b[3;43m' },
-    error: { label: 'ERROR', color: '\x1b[1m\x1b[3;41m' },
-    debug: { label: 'DEBUG', color: '\x1b[1m\x1b[3;45m' },
-    sources: { label: 'SOURCES', color: '\x1b[1m\x1b[3;46m' },
-    started: { label: 'STARTED', color: '\x1b[1m\x1b[3;44m' },
-    network: { label: 'NETWORK', color: '\x1b[1m\x1b[3;44m' }
+    info:    { label: 'INFO',    color: '\x1b[32m' },
+    warn:    { label: 'WARN',    color: '\x1b[33m' },
+    error:   { label: 'ERROR',   color: '\x1b[31m' },
+    debug:   { label: 'DEBUG',   color: '\x1b[36m' },
+    sources: { label: 'SOURCES', color: '\x1b[35m' },
+    started: { label: 'STARTED', color: '\x1b[34m' },
+    network: { label: 'NETWORK', color: '\x1b[90m' }
   }
 
-  const resetColor = '\x1b[0m'
+  const reset = '\x1b[0m'
+  const categoryColor = '\x1b[90m'
   const time = new Date().toISOString().slice(11, 23)
   const lvl = levels[level] || { label: level.toUpperCase(), color: '' }
-  const formattedCategory = category ? `: ${category} >` : ''
 
   const messageArgs = args.length > 1 ? args.slice(1) : args
   const formattedArgs = messageArgs.map((arg) => {
-    if (arg instanceof Error) {
-      return `${arg.stack || arg.message}`
-    }
-    if (typeof arg === 'object' && arg !== null) {
+    if (arg instanceof Error) return arg.stack || arg.message
+    if (typeof arg === 'object' && arg !== null)
       return util.inspect(arg, { depth: null, colors: false })
-    }
     return arg
   })
 
   const msg = util.format(...formattedArgs)
+  const cat = category
+    ? ` ${categoryColor}[${category}]${reset} >`
+    : ''
 
-  const consoleOutput = `[${time}] ${lvl.color}[${lvl.label}] >${resetColor}${formattedCategory} ${msg}`
-  console.log(consoleOutput)
+  const out =
+    `[${time}] ${lvl.color}[${lvl.label}] >${reset}` +
+    `${cat} ${msg}`
+
+  console.log(out)
 
   if (logStream) {
-    const fileOutput = `[${new Date().toISOString()}] [${lvl.label}] ${formattedCategory} ${msg}\n`
-    logStream.write(fileOutput)
+    const fileOut =
+      `[${new Date().toISOString()}] [${lvl.label}]` +
+      `${category ? ` [${category}]` : ''} ${msg}\n`
+    logStream.write(fileOut)
   }
 }
+
 
 const verifyDiscordID = (id) => DISCORD_ID_REGEX.test(String(id))
 
