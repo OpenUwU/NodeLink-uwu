@@ -26,3 +26,5 @@
 !scripts
 !scripts/**
 !sea-config.json
+!tsconfig.json
+
